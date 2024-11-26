@@ -1,0 +1,177 @@
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      title: 'MacOS Dock',
+      home: Scaffold(
+        backgroundColor: Colors.grey[900],
+        body: DockScreen(),
+      ),
+    );
+  }
+}
+
+class DockScreen extends StatefulWidget {
+  @override
+  _DockScreenState createState() => _DockScreenState();
+}
+
+class _DockScreenState extends State<DockScreen> {
+  List<String> icons = [
+    'https://upload.wikimedia.org/wikipedia/en/9/98/FinderBigSur.png', // Finder
+    'https://upload.wikimedia.org/wikipedia/commons/8/87/Google_Chrome_icon_%282011%29.png', // Chrome
+    'https://cdn.iconscout.com/icon/free/png-256/free-apple-notes-icon-download-in-svg-png-gif-file-formats--logo-note-apps-pack-user-interface-icons-493153.png?f=webp&w=256', // Notes
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Terminalicon2.png/800px-Terminalicon2.png', // Terminal
+    'https://help.apple.com/assets/66E20C11AAB692A44803F303/66E20C12A39D218AA90A13A6/en_GB/67b42e1eeb7bbfca6279218dff8b9ba1.png', // Preview
+  ];
+
+  void swapIcons(int oldIndex, int newIndex) {
+    setState(() {
+      final temp = icons[oldIndex];
+      icons[oldIndex] = icons[newIndex];
+      icons[newIndex] = temp;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Stack(
+            alignment: Alignment.bottomCenter,
+            children: [
+              Container(
+                height: 100,
+                width: MediaQuery.of(context).size.width * 0.8,
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(40),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black87,
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned.fill(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(icons.length, (index) {
+                    return DraggableAppIcon(
+                      iconUrl: icons[index],
+                      index: index,
+                      onSwap: swapIcons,
+                    );
+                  }),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 50),
+        ],
+      ),
+    );
+  }
+}
+
+class DraggableAppIcon extends StatefulWidget {
+  final String iconUrl;
+  final int index;
+  final Function(int, int) onSwap;
+
+  const DraggableAppIcon({
+    required this.iconUrl,
+    required this.index,
+    required this.onSwap,
+  });
+
+  @override
+  _DraggableAppIconState createState() => _DraggableAppIconState();
+}
+
+class _DraggableAppIconState extends State<DraggableAppIcon>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _hoverController;
+  late Animation<double> _hoverAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverController = AnimationController(
+      duration: Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _hoverAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<int>(
+      onAccept: (oldIndex) {
+        widget.onSwap(oldIndex, widget.index);
+      },
+      builder: (context, candidateData, rejectedData) {
+        return MouseRegion(
+          onEnter: (_) => _hoverController.forward(),
+          onExit: (_) => _hoverController.reverse(),
+          child: Draggable<int>(
+            data: widget.index,
+            feedback: ScaleTransition(
+              scale: _hoverAnimation,
+              child: _buildIcon(),
+            ),
+//             childWhenDragging: Opacity(
+//               opacity: 0.5,
+//               child: _buildIcon(),
+//             ),
+            childWhenDragging: SizedBox.shrink(),
+            child: ScaleTransition(
+              scale: _hoverAnimation,
+              child: _buildIcon(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildIcon() {
+    return Container(
+      width: 60,
+      height: 60,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        image: DecorationImage(
+          image: NetworkImage(widget.iconUrl),
+          fit: BoxFit.cover,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black45,
+            blurRadius: 5,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+    );
+  }
+}
