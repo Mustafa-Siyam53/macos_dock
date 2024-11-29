@@ -1,0 +1,245 @@
+import 'dart:ui';
+
+import 'package:flutter/material.dart';
+
+class DockScreen extends StatefulWidget {
+  const DockScreen({super.key});
+
+  @override
+  _DockScreenState createState() => _DockScreenState();
+}
+
+class _DockScreenState extends State<DockScreen> {
+  List<String> icons = [
+    'https://upload.wikimedia.org/wikipedia/en/9/98/FinderBigSur.png',
+    'https://upload.wikimedia.org/wikipedia/commons/8/87/Google_Chrome_icon_%282011%29.png',
+    'https://cdn.iconscout.com/icon/free/png-256/free-apple-notes-icon-download-in-svg-png-gif-file-formats--logo-note-apps-pack-user-interface-icons-493153.png?f=webp&w=256',
+    'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b3/Terminalicon2.png/800px-Terminalicon2.png',
+    'https://help.apple.com/assets/66E20C11AAB692A44803F303/66E20C12A39D218AA90A13A6/en_GB/67b42e1eeb7bbfca6279218dff8b9ba1.png',
+  ];
+
+  int? draggedIndex;
+  double? dragPosition;
+
+  void shiftIcons(int oldIndex, int newIndex) {
+    setState(() {
+      String draggedIcon = icons[oldIndex];
+      icons.removeAt(oldIndex);
+      icons.insert(newIndex, draggedIcon);
+      draggedIndex = newIndex;
+    });
+  }
+
+  void updateDragPosition(Offset position) {
+    setState(() {
+      dragPosition = position.dx;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: Center(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned(
+              height: 100,
+              width: MediaQuery.of(context).size.width * 0.8,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.black.withOpacity(0.7),
+                      Colors.black.withOpacity(0.5),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(40),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black87,
+                      blurRadius: 10,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                  child: Container(),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(icons.length, (index) {
+                  return DraggableAppIcon(
+                    iconUrl: icons[index],
+                    index: index,
+                    onSwap: shiftIcons,
+                    isBeingDragged: draggedIndex == index,
+                    iconsCount: icons.length,
+                    dragPosition: dragPosition,
+                    onDragStarted: () => setState(() {
+                      draggedIndex = index;
+                    }),
+                    onDragEnd: () => setState(() {
+                      draggedIndex = null;
+                      dragPosition = null;
+                    }),
+                    onDragUpdate: updateDragPosition,
+                  );
+                }),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DraggableAppIcon extends StatefulWidget {
+  final String iconUrl;
+  final int index;
+  final Function(int, int) onSwap;
+  final bool isBeingDragged;
+  final int iconsCount;
+  final double? dragPosition;
+  final VoidCallback onDragStarted;
+  final VoidCallback onDragEnd;
+  final Function(Offset) onDragUpdate;
+
+  const DraggableAppIcon({
+    super.key,
+    required this.iconUrl,
+    required this.index,
+    required this.onSwap,
+    required this.isBeingDragged,
+    required this.iconsCount,
+    required this.dragPosition,
+    required this.onDragStarted,
+    required this.onDragEnd,
+    required this.onDragUpdate,
+  });
+
+  @override
+  _DraggableAppIconState createState() => _DraggableAppIconState();
+}
+
+class _DraggableAppIconState extends State<DraggableAppIcon>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _hoverController;
+  late Animation<double> _hoverAnimation;
+  final GlobalKey _iconKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _hoverAnimation = Tween<double>(begin: 1.0, end: 1.5).animate(
+      CurvedAnimation(parent: _hoverController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    super.dispose();
+  }
+
+  double _calculateOffset() {
+    if (widget.dragPosition == null || widget.isBeingDragged) return 0;
+
+    final RenderBox? box =
+        _iconKey.currentContext?.findRenderObject() as RenderBox?;
+    if (box == null) return 0;
+
+    final position = box.localToGlobal(Offset.zero);
+    final iconCenter = position.dx + box.size.width / 2;
+    final difference = widget.dragPosition! - iconCenter;
+
+    // Smooth offset adjustment
+    const maxOffset = 20.0;
+    const threshold = 150.0;
+
+    if (difference.abs() > threshold) return 0;
+
+    final proximityFactor = 1 - (difference.abs() / threshold);
+    return maxOffset * proximityFactor * (difference > 0 ? 1 : -1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<int>(
+      onWillAccept: (oldIndex) => true,
+      onAccept: (oldIndex) {
+        widget.onSwap(oldIndex, widget.index);
+      },
+      builder: (context, candidateData, rejectedData) {
+        return MouseRegion(
+          onEnter: (_) => _hoverController.forward(),
+          onExit: (_) => _hoverController.reverse(),
+          child: Draggable<int>(
+            data: widget.index,
+            onDragStarted: widget.onDragStarted,
+            onDragEnd: (_) => widget.onDragEnd(),
+            onDragUpdate: (details) =>
+                widget.onDragUpdate(details.globalPosition),
+            rootOverlay: true,
+            feedback: ScaleTransition(
+              scale: _hoverAnimation,
+              child: _buildIcon(isDragging: true),
+            ),
+            childWhenDragging: const SizedBox(width: 60),
+            child: ScaleTransition(
+              scale: _hoverAnimation,
+              child: _buildIcon(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildIcon({bool isDragging = false}) {
+    final proximityScale = widget.dragPosition != null && !widget.isBeingDragged
+        ? 1 + (_calculateOffset().abs() / 50)
+        : 1.0;
+
+    return AnimatedContainer(
+      key: _iconKey,
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      transform: Matrix4.translationValues(_calculateOffset(), 0, 0),
+      child: Transform.scale(
+        scale: isDragging ? 1.5 : proximityScale,
+        child: Container(
+          width: 60,
+          height: 60,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            image: DecorationImage(
+              image: NetworkImage(widget.iconUrl),
+              fit: BoxFit.cover,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black45,
+                blurRadius: 5,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
